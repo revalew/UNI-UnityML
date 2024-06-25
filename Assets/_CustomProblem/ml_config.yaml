@@ -1,4 +1,4 @@
-# mlagents-learn "E:\0PROGRAMOWANIE Projekty\Unity\ZTPGK UML Machine Learning in Unity\MachineLearning\Assets\CustomProblem\ml_config.yaml" --run-id=MojAgent
+# mlagents-learn "E:\0PROGRAMOWANIE Projekty\Unity\ZTPGK UML Machine Learning in Unity\MachineLearning\Assets\_CustomProblem\ml_config.yaml" --run-id=MojAgent2
 behaviors:
   MojAgent2:
     trainer_type: ppo

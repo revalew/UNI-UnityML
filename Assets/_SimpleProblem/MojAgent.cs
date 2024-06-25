@@ -4,62 +4,154 @@ using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
 using Unity.MLAgents.Actuators;
-using static UnityEngine.GraphicsBuffer;
+
+[System.Serializable]
+public class  Rewards
+{
+  public float sum;
+  [Space]
+  [SerializeField] float OnBramka;
+  [SerializeField] float OnSciana;
+  [SerializeField] float OnPlayer;
+  [SerializeField] float OnPlayerWall;
+  [SerializeField] float OnPlayerGoal;
+
+  public float GetOnBramka()
+  {
+    sum += OnBramka;
+    return OnBramka;
+  }
+
+  public float GetOnSciana()
+  {
+    sum += OnSciana;
+    return OnSciana;
+  }
+
+  public float GetOnPlayer()
+  {
+    sum += OnPlayer;
+    return OnPlayer;
+  }
+
+  public float GetOnPlayerWall()
+  {
+    sum += OnPlayerWall;
+    return OnPlayerWall;
+  }
+  public float GetOnPlayerGoal()
+  {
+    sum += OnPlayerGoal;
+    return OnPlayerGoal;
+  }
+
+}
 
 public class MojAgent : Agent
 {
   // Referencje do komponentów fizycznych agenta
   private Rigidbody agentRigidbody;
+  private Rigidbody rbBall;
 
   // Referencja do p³aszczyzny i celu
   public GameObject plane;
-  public GameObject goal;
+  public GameObject plane1;
+  public GameObject ballObj;
+  public Ball ball;
 
   // Zakres losowania pozycji agenta
   private Vector3 spawnAreaMin;
   private Vector3 spawnAreaMax;
+  private Vector3 spawnAreaMin1;
+  private Vector3 spawnAreaMax1;
+
   public float moveSpeed;
+  public Rewards rewards = new();
 
   private void Start()
   {
     agentRigidbody = GetComponent<Rigidbody>();
+    rbBall = ballObj.GetComponent<Rigidbody>();
 
     // Oblicz granice p³aszczyzny
     MeshRenderer planeRenderer = plane.GetComponent<MeshRenderer>();
     spawnAreaMin = planeRenderer.bounds.min;
     spawnAreaMax = planeRenderer.bounds.max;
+    //Ball
+    MeshRenderer planeRenderer1 = plane1.GetComponent<MeshRenderer>();
+    spawnAreaMin1 = planeRenderer1.bounds.min;
+    spawnAreaMax1 = planeRenderer1.bounds.max;
+  }
+  private Vector3 GetRandomSpawnPosition(Vector3 spawnMin, Vector3 spawnMax)
+  {
+    float x = Random.Range(spawnMin.x, spawnMax.x);
+    float z = Random.Range(spawnMin.z, spawnMax.z);
+    float y = transform.position.y; // Zak³adamy, ¿e agent porusza siê po p³aszczyŸnie i y pozostaje sta³e
+
+    return new Vector3(x, y, z);
+  }
+
+  private void Awake()
+  {
+    ball.onBramka += OnBramka;
+    ball.onSciana += OnSciana;
+    ball.onPlayer += OnPlayer;
+  }
+  private void OnDestroy()
+  {
+    ball.onBramka -= OnBramka;
+    ball.onSciana -= OnSciana;
+    ball.onPlayer -= OnPlayer;
+  } 
+  private void OnPlayer()
+  {
+    AddReward(rewards.GetOnPlayer());
+  }
+
+  private void OnSciana()
+  {
+    AddReward(rewards.GetOnSciana());
+    EndEpisode();
+  }
+
+  private void OnPlayerWall()
+  {
+    AddReward(rewards.GetOnPlayerWall());
+    EndEpisode();
+  }
+
+  private void OnPlayerGoal()
+  {
+    AddReward(rewards.GetOnPlayerGoal());
+   
+  }
+  private void OnBramka()
+  {
+    AddReward(rewards.GetOnBramka());
+    EndEpisode();
   }
 
   // Metoda wywo³ywana na pocz¹tku ka¿dego epizodu
   public override void OnEpisodeBegin()
   {
+    rewards.sum = 0;
     // Wyzeruj stan fizyczny agenta
-    ResetAgentPhysics();
-
-    // Wylosuj now¹ pozycjê dla agenta
-    Vector3 newPosition = GetRandomSpawnPosition();
-    transform.position = newPosition;
-
-    // Resetuj pozycjê celu
-    goal.transform.position = GetRandomSpawnPosition();
-  }
-
-  // Metoda do resetowania stanu fizycznego agenta
-  private void ResetAgentPhysics()
-  {
     agentRigidbody.velocity = Vector3.zero;
     agentRigidbody.angularVelocity = Vector3.zero;
+
+    // Wylosuj now¹ pozycjê dla agenta
+    Vector3 newPosition = GetRandomSpawnPosition(spawnAreaMin, spawnAreaMax);
+    transform.position = newPosition;
+
+    // Resetuj pozycjê i predkosc pilki
+    rbBall.velocity = Vector3.zero;
+    rbBall.angularVelocity = Vector3.zero;
+
+    ballObj.transform.position = GetRandomSpawnPosition(spawnAreaMin1, spawnAreaMax1);
   }
 
   // Metoda do losowania nowej pozycji w okreœlonym zakresie
-  private Vector3 GetRandomSpawnPosition()
-  {
-    float x = Random.Range(spawnAreaMin.x, spawnAreaMax.x);
-    float z = Random.Range(spawnAreaMin.z, spawnAreaMax.z);
-    float y = transform.position.y; // Zak³adamy, ¿e agent porusza siê po p³aszczyŸnie i y pozostaje sta³e
-    
-    return new Vector3(x, y, z);
-  }
+
 
   // Metoda Heuristic do rêcznego sterowania agentem
   public override void Heuristic(in ActionBuffers actionsOut)
@@ -74,62 +166,29 @@ public class MojAgent : Agent
   {
     var continuousActions = actionBuffers.ContinuousActions;
 
-    // Przyk³adowe zastosowanie akcji do ruchu agenta
     float moveHorizontal = continuousActions[0];
     float moveVertical = continuousActions[1];
 
-    // Zastosowanie akcji do Rigidbody
-    Vector3 controlSignal = new Vector3(moveHorizontal, 0, moveVertical).normalized;
-    agentRigidbody.AddForce(controlSignal * moveSpeed);
-
+    transform.position += new Vector3(moveHorizontal, 0, moveVertical) * Time.deltaTime * moveSpeed;
   }
 
   private void OnCollisionEnter(Collision collision)
   {
-    float reward = 0.0f;
-    tag = collision.gameObject.tag;
-    if (tag == "Goal")
+    if(collision.collider.tag == "Wall")
     {
-      reward = 5.0f;
-      Debug.Log($"Kolizja z '{tag}'");
-      AddReward(reward);
-      EndEpisode();
+      OnPlayerWall();
     }
-    // SprawdŸ, czy kolizja dotyczy obiektu z tagiem "Wall"
-    else if (tag == "Wall")
+    if (collision.collider.tag == "Goal")
     {
-      reward = -1.0f;
-      Debug.Log($"Kolizja z '{tag}'");
-      AddReward(reward);
-      EndEpisode();
+      OnPlayerGoal();
     }
   }
 
+
   public override void CollectObservations(VectorSensor sensor)
   {
-    // 1. Pozycja agenta
     sensor.AddObservation(transform.localPosition);
-
-    // 2. Pozycja celu (jeœli jest okreœlona)
-    if (goal != null)
-    {
-      sensor.AddObservation(goal.transform.localPosition);
-    }
-    else
-    {
-      // Jeœli cel nie jest zdefiniowany, dodaj zerow¹ pozycjê
-      sensor.AddObservation(Vector3.zero);
-    }
-
-    // 3. Prêdkoœæ agenta
-    // Mo¿esz zbieraæ równie¿ inne informacje dotycz¹ce prêdkoœci lub kierunku ruchu
-    //sensor.AddObservation(agentRigidbody.velocity.magnitude);
-    sensor.AddObservation(agentRigidbody.velocity.x);
-    sensor.AddObservation(agentRigidbody.velocity.z);
-
-    // Dodaj dodatkowe obserwacje wed³ug potrzeb, np. kierunek ruchu, rotacja itp.
-
-    // Przyk³adowe dodatkowe obserwacje:
-    // sensor.AddObservation(transform.forward); // Kierunek w którym patrzy agent
+    sensor.AddObservation(ballObj.transform.localPosition);
+    sensor.AddObservation(ball.transform.localPosition);
   }
 }
